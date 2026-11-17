@@ -7,7 +7,8 @@ Native Android companion/controller project inspired by [Carpenter-MK1/MaaHatsub
 ## Architecture
 
 - **Kotlin + Jetpack Compose** — Android application and dashboard.
-- **Android NsdManager (DNS-SD/mDNS)** — discovery of ADB Wireless Debugging pairing and connect service advertisements.
+- **Kadb** — ADB Wireless Debugging pairing, authenticated transport, and read-only shell probe.
+- **Android Keystore + AES-256-GCM** — wraps the persisted ADB RSA host identity at rest.
 - **C++ + JNI + CMake** — initial native library integration.
 - **Rust** — platform-independent task-state core.
 - **GitHub Actions** — Rust tests and Android debug APK workflow.
@@ -21,20 +22,22 @@ Native Android companion/controller project inspired by [Carpenter-MK1/MaaHatsub
 - Tap a discovered pairing or connect endpoint to fill the matching manual field; pairing and connect ports remain separate.
 - Removes endpoints from the list when Android reports that their DNS-SD service disappeared.
 - C++ JNI foundation.
-- Device-local RSA-2048 identity generation/storage through Android Keystore, with a SHA-256 public-key fingerprint displayed in the dashboard. The private key is not exported by this feature.
+- ADB-compatible RSA-2048 host identity persisted as encrypted private-key material. An AES-256-GCM wrapping key is held in Android Keystore; a SHA-256 certificate fingerprint is displayed in the dashboard.
+- Wireless ADB pairing action using the target device's manually entered six-digit pairing code.
+- Authenticated ADB TLS connection action using the separate connect port, followed by a read-only `getprop ro.product.model` probe.
 - Rust task-state machine with start, pause, resume, complete, and fail transitions plus unit tests.
 - CI workflow for Rust tests, Android debug build, APK checksum verification, and artifact upload.
 
 ## Not implemented
 
-- ADB TLS pairing handshake and ADB-compatible host-key encoding/authentication.
-- Authenticated ADB transport or session management.
+- Pairing and a read-only authenticated connection are now wired through Kadb, but still require validation on real Android devices and different OEM builds.
+- Persistent connection/session UI, disconnect, timeout, and reconnect handling.
 - Remote screen capture or streaming.
 - Touch/key input forwarding.
 - OCR, template matching, or game recognition.
 - Daily, Contest, Farm New Account, or other automation pipelines.
 
-Network discovery is not pairing. A service appearing in the list only means that its DNS-SD advertisement was found on the local network. The local Keystore identity is currently a storage foundation only; it is not yet encoded as an ADB host key and is not used by an ADB connection. The user must still approve pairing on the target device through Android Wireless Debugging. The app does not obtain or infer the pairing code.
+Network discovery is not pairing. A service appearing in the list only means that its DNS-SD advertisement was found on the local network. The app stores the ADB RSA private key encrypted with AES-GCM. The AES wrapping key is non-exportable in Android Keystore; the RSA private key is decrypted in memory only when Kadb performs ADB operations. The user must enter the pairing code displayed by the target device and must enable Wireless Debugging there. The app does not obtain or infer the pairing code.
 
 ## Test on devices
 
@@ -63,17 +66,15 @@ See [GitHub Actions](https://github.com/game6789y-wq/Gaku-bot/actions). A debug 
 
 ## Roadmap
 
-1. Verify endpoint selection, service-loss handling, and Android Keystore identity creation on real Android devices.
-2. Adapt the local identity to the exact ADB host-key format and validate compatibility.
-3. Implement secure Wireless Debugging SPAKE2 pairing and authenticated TLS ADB transport.
-4. Add connection state, timeout, disconnect, and reconnect handling.
-5. Implement authorized screen capture and input forwarding.
-6. Add OCR and template matching.
-7. Port automation pipelines after reviewing upstream licenses and dependencies.
-8. Test on real devices and document verified compatibility.
+1. Validate Kadb pairing, TLS authentication, and read-only shell probe on real Android devices.
+2. Add persistent connection state, timeout, disconnect, and reconnect handling.
+3. Implement authorized screen capture and input forwarding.
+4. Add OCR and template matching.
+5. Port automation pipelines after reviewing upstream licenses and dependencies.
+6. Test on multiple OEM builds and document verified compatibility.
 
 ## Security and licensing
 
-Only connect to devices you own or are authorized to control. Never log or commit pairing codes, ADB private keys, credentials, or private screen content.
+Kadb is an Apache-2.0 licensed third-party dependency: https://github.com/flyfishxu/Kadb. The app uses an Android Keystore AES wrapping key to encrypt the persisted ADB host private key. The unwrapped RSA key exists in memory during protocol operations. Only connect to devices you own or are authorized to control. Never log or commit pairing codes, ADB private keys, credentials, or private screen content.
 
 This project is inspired by the upstream project. Review its license and all third-party notices before reusing source code, resources, models, binaries, or framework components. No upstream automation assets are claimed to be included in this foundation.

@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.flyfishxu.kadb.Kadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -154,17 +156,21 @@ private data class ConnectionInput(
     val pairingCode: String
 )
 
-private fun validateConnection(input: ConnectionInput): String? {
-    val octets = input.host.trim().split(".")
+private fun validateHostPort(host: String, portText: String): String? {
+    val octets = host.trim().split(".")
     if (octets.size != 4 || octets.any { part ->
         part.isEmpty() || part.length > 3 || part.any { !it.isDigit() } ||
             (part.length > 1 && part.startsWith("0")) ||
             (part.toIntOrNull() == null || part.toIntOrNull() !in 0..255)
     }) return "Enter a valid IPv4 address."
-    val connect = input.connectPort.toIntOrNull()
-    if (connect == null || connect !in 1..65535) return "ADB connect port must be between 1 and 65535."
-    val pairing = input.pairingPort.toIntOrNull()
-    if (pairing == null || pairing !in 1..65535) return "Pairing port must be between 1 and 65535."
+    val port = portText.toIntOrNull()
+    if (port == null || port !in 1..65535) return "Port must be between 1 and 65535."
+    return null
+}
+
+private fun validateConnection(input: ConnectionInput): String? {
+    validateHostPort(input.host, input.connectPort)?.let { return it }
+    validateHostPort(input.host, input.pairingPort)?.let { return it }
     if (!input.pairingCode.matches(Regex("\\d{6}"))) return "Pairing code must contain exactly 6 digits."
     return null
 }
@@ -191,6 +197,7 @@ private fun Dashboard(
     var identityStatus by remember { mutableStateOf("No local identity loaded") }
     var identityBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val appContext = LocalContext.current.applicationContext
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -241,11 +248,64 @@ private fun Dashboard(
                 OutlinedTextField(pairingPort, { pairingPort = it.filter(Char::isDigit).take(5); validationError = null }, Modifier.fillMaxWidth(), label = { Text("Wireless debugging pairing port") }, singleLine = true)
                 OutlinedTextField(pairingCode, { pairingCode = it.filter(Char::isDigit).take(6); validationError = null }, Modifier.fillMaxWidth(), label = { Text("6-digit pairing code") }, singleLine = true)
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Button(onClick = {
-                    val error = validateConnection(ConnectionInput(host, port, pairingPort, pairingCode))
-                    validationError = error
-                    status = if (error == null) "Settings valid. ADB authentication and transport are not implemented yet." else "Check connection settings."
-                }) { Text("Validate settings") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        val error = validateConnection(ConnectionInput(host, port, pairingPort, pairingCode))
+                        validationError = error
+                        status = if (error == null) "Settings look valid." else "Check connection settings."
+                    }) { Text("Validate settings") }
+                    Button(
+                        enabled = pairingCode.length == 6 && pairingPort.isNotBlank(),
+                        onClick = {
+                            val error = validateHostPort(host, pairingPort)
+                                ?: if (!pairingCode.matches(Regex("\\d{6}"))) "Pairing code must contain exactly 6 digits." else null
+                            validationError = error
+                            if (error == null) {
+                                val targetHost = host.trim()
+                                val targetPort = pairingPort.toInt()
+                                val code = pairingCode
+                                pairingCode = ""
+                                status = "Pairing with target device…"
+                                scope.launch {
+                                    status = try {
+                                        withContext(Dispatchers.IO) {
+                                            LocalAdbIdentity.loadOrCreate(appContext)
+                                            Kadb.pair(targetHost, targetPort, code)
+                                        }
+                                        "Wireless ADB pairing completed. Now connect using the separate connect port."
+                                    } catch (failure: Exception) {
+                                        "Pairing failed: " + (failure.message ?: failure.javaClass.simpleName)
+                                    }
+                                }
+                            }
+                        }
+                    ) { Text("Pair device") }
+                }
+                Button(
+                    enabled = host.isNotBlank() && port.isNotBlank(),
+                    onClick = {
+                        val error = validateHostPort(host, port)
+                        validationError = error
+                        if (error == null) {
+                            val targetHost = host.trim()
+                            val targetPort = port.toInt()
+                            status = "Connecting to authenticated ADB transport…"
+                            scope.launch {
+                                status = try {
+                                    val model = withContext(Dispatchers.IO) {
+                                        LocalAdbIdentity.loadOrCreate(appContext)
+                                        Kadb.create(targetHost, targetPort).use { adb ->
+                                            adb.shell("getprop ro.product.model").output.trim()
+                                        }
+                                    }
+                                    "Connected and authenticated. Target: " + model.ifBlank { "Android device" }
+                                } catch (failure: Exception) {
+                                    "Connection failed: " + (failure.message ?: failure.javaClass.simpleName)
+                                }
+                            }
+                        }
+                    }
+                ) { Text("Connect and identify device") }
                 Text("Status: $status", style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -253,15 +313,15 @@ private fun Dashboard(
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Local ADB identity", style = MaterialTheme.typography.titleMedium)
-                Text("Create or load a device-local RSA-2048 key in Android Keystore. The private key is non-exportable through this app.")
+                Text("Create or load an ADB-compatible RSA-2048 host identity. Its private-key file is encrypted with AES-256-GCM using a non-exportable Android Keystore wrapping key.")
                 Button(enabled = !identityBusy, onClick = {
                     identityBusy = true
                     identityStatus = "Working with Android Keystore…" 
                     scope.launch {
                         try {
-                            val fingerprint = withContext(Dispatchers.IO) { LocalAdbIdentity.loadOrCreate() }
+                            val fingerprint = withContext(Dispatchers.IO) { LocalAdbIdentity.loadOrCreate(appContext) }
                             identityFingerprint = fingerprint
-                            identityStatus = "Local identity is ready on this device."
+                            identityStatus = "ADB identity is ready. RSA private-key data is encrypted at rest with an Android Keystore AES key."
                         } catch (error: Exception) {
                             identityStatus = "Keystore error: " + error.javaClass.simpleName
                         } finally { identityBusy = false }
@@ -272,7 +332,7 @@ private fun Dashboard(
                     Text("Public-key SHA-256 fingerprint", style = MaterialTheme.typography.labelMedium)
                     Text(it, style = MaterialTheme.typography.bodySmall)
                 }
-                Text("This identity is not yet in ADB wire format and is not used for pairing or authentication.", style = MaterialTheme.typography.bodySmall)
+                Text("Kadb uses this identity for ADB pairing and authenticated transport. The wrapping key stays in Android Keystore; decrypted RSA material is used only in memory when required.", style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -293,7 +353,7 @@ private fun Dashboard(
                 Text("Rust task core is tested independently and is not yet linked into the Android app.")
             }
         }
-        Text("Network scanning only discovers ADB service advertisements. It does not reveal pairing codes or bypass Android authorization.", style = MaterialTheme.typography.bodySmall)
+        Text("Network scanning only discovers ADB service advertisements. Pairing requires the 6-digit code displayed by the target device and must be approved through Android Wireless Debugging.", style = MaterialTheme.typography.bodySmall)
     }
 }
 

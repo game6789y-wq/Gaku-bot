@@ -14,13 +14,14 @@ Native Android companion/controller project inspired by [Carpenter-MK1/MaaHatsub
 ## Implemented
 
 - Compose dashboard with target IP, ADB port, wireless pairing port, and pairing-code fields.
+- Local IPv4, port-range, and six-digit pairing-code validation (validation only; no network pairing).
 - Initial C++ JNI library.
-- Rust task-state model with start/pause handling and unit tests.
+- Rust task-state machine with start, pause, resume, complete, and fail transitions plus unit tests.
 - CI workflow for Rust tests, Android debug build, APK checksum verification, and artifact upload.
 
 ## Not implemented
 
-- Wireless ADB pairing, authentication, or network transport.
+- Wireless ADB pairing, authentication, or network transport. The current UI validates settings only.
 - Device session management and reconnect logic.
 - Remote screen capture or streaming.
 - Touch/key input forwarding.

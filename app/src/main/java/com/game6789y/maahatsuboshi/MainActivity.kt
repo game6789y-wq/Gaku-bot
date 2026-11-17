@@ -30,12 +30,12 @@ private fun validateConnection(input: ConnectionInput): String? {
     val octets = input.host.trim().split(".")
     if (octets.size != 4 || octets.any { part ->
         part.isEmpty() || part.length > 3 || part.any { !it.isDigit() } ||
-            (part.length > 1 && part.startsWith("0")) || part.toIntOrNull() !in 0..255
+            (part.length > 1 && part.startsWith("0")) || (part.toIntOrNull() == null || part.toIntOrNull() !in 0..255)
     }) return "Enter a valid IPv4 address."
     val connect = input.connectPort.toIntOrNull()
-    if (connect !in 1..65535) return "ADB connect port must be between 1 and 65535."
+    if (connect == null || connect !in 1..65535) return "ADB connect port must be between 1 and 65535."
     val pairing = input.pairingPort.toIntOrNull()
-    if (pairing !in 1..65535) return "Pairing port must be between 1 and 65535."
+    if (pairing == null || pairing !in 1..65535) return "Pairing port must be between 1 and 65535."
     if (!input.pairingCode.matches(Regex("\\d{6}"))) return "Pairing code must contain exactly 6 digits."
     return null
 }

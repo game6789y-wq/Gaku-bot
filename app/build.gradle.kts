@@ -30,5 +30,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("com.flyfishxu:kadb:2.1.5")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

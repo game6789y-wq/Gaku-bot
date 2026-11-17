@@ -37,16 +37,30 @@ class MainActivity : ComponentActivity() {
                     endpoints.add(endpoint)
                 }
             },
+            onLost = { serviceName, kind ->
+                runOnUiThread { endpoints.removeAll { it.serviceName == serviceName && it.serviceType == kind } }
+            },
             onStatus = { message -> runOnUiThread { discoveryStatus.value = message } }
         )
         setContent {
+            var selectedHost by remember { mutableStateOf("") }
+            var selectedConnectPort by remember { mutableStateOf("5555") }
+            var selectedPairingPort by remember { mutableStateOf("") }
             MaterialTheme {
                 Surface(Modifier.fillMaxSize()) {
                     Dashboard(
                         endpoints = endpoints,
                         discoveryStatus = discoveryStatus.value,
                         onStartDiscovery = { endpoints.clear(); discovery.start() },
-                        onStopDiscovery = { discovery.stop() }
+                        onStopDiscovery = { discovery.stop() },
+                        initialHost = selectedHost,
+                        initialConnectPort = selectedConnectPort,
+                        initialPairingPort = selectedPairingPort,
+                        onSelectEndpoint = { endpoint ->
+                            selectedHost = endpoint.host
+                            if (endpoint.serviceType == "pairing") selectedPairingPort = endpoint.port.toString()
+                            else selectedConnectPort = endpoint.port.toString()
+                        }
                     )
                 }
             }
@@ -62,6 +76,7 @@ class MainActivity : ComponentActivity() {
 private class AdbNsdDiscovery(
     context: Context,
     private val onEndpoint: (AdbEndpoint) -> Unit,
+    private val onLost: (String, String) -> Unit,
     private val onStatus: (String) -> Unit
 ) {
     private val manager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -96,7 +111,9 @@ private class AdbNsdDiscovery(
                     }
                 }
                 override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                    onStatus("A discovered ADB service is no longer visible. Scan again to refresh.")
+                    val kind = if (serviceInfo.serviceType.contains("pairing")) "pairing" else "connect"
+                    onLost(serviceInfo.serviceName, kind)
+                    onStatus("An ADB service disappeared from the network.")
                 }
                 override fun onDiscoveryStopped(serviceType: String) = Unit
                 override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
@@ -154,11 +171,15 @@ private fun Dashboard(
     endpoints: List<AdbEndpoint>,
     discoveryStatus: String,
     onStartDiscovery: () -> Unit,
-    onStopDiscovery: () -> Unit
+    onStopDiscovery: () -> Unit,
+    initialHost: String,
+    initialConnectPort: String,
+    initialPairingPort: String,
+    onSelectEndpoint: (AdbEndpoint) -> Unit
 ) {
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf("5555") }
-    var pairingPort by remember { mutableStateOf("") }
+    var host by remember(initialHost) { mutableStateOf(initialHost) }
+    var port by remember(initialConnectPort) { mutableStateOf(initialConnectPort) }
+    var pairingPort by remember(initialPairingPort) { mutableStateOf(initialPairingPort) }
     var pairingCode by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Not connected") }
     var validationError by remember { mutableStateOf<String?>(null) }
@@ -184,12 +205,20 @@ private fun Dashboard(
                     Text("No ADB services discovered yet.", style = MaterialTheme.typography.bodySmall)
                 } else {
                     endpoints.forEach { endpoint ->
-                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Card(
+                            onClick = { onSelectEndpoint(endpoint) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
                             Column(Modifier.padding(10.dp)) {
-                                Text("ADB ${endpoint.serviceType} service", style = MaterialTheme.typography.labelLarge)
+                                Text("ADB ${endpoint.serviceType} service · Tap to use", style = MaterialTheme.typography.labelLarge)
                                 Text("${endpoint.host}:${endpoint.port}")
                                 Text(endpoint.serviceName, style = MaterialTheme.typography.bodySmall)
-                                Text("Discovery only — no pairing or connection has been made.", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (endpoint.serviceType == "pairing") "Fills the pairing port only."
+                                    else "Fills the ADB connect port only.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                         }
                     }

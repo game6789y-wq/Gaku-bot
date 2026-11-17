@@ -21,19 +21,20 @@ Native Android companion/controller project inspired by [Carpenter-MK1/MaaHatsub
 - Tap a discovered pairing or connect endpoint to fill the matching manual field; pairing and connect ports remain separate.
 - Removes endpoints from the list when Android reports that their DNS-SD service disappeared.
 - C++ JNI foundation.
+- Device-local RSA-2048 identity generation/storage through Android Keystore, with a SHA-256 public-key fingerprint displayed in the dashboard. The private key is not exported by this feature.
 - Rust task-state machine with start, pause, resume, complete, and fail transitions plus unit tests.
 - CI workflow for Rust tests, Android debug build, APK checksum verification, and artifact upload.
 
 ## Not implemented
 
-- ADB TLS pairing handshake and key management.
+- ADB TLS pairing handshake and ADB-compatible host-key encoding/authentication.
 - Authenticated ADB transport or session management.
 - Remote screen capture or streaming.
 - Touch/key input forwarding.
 - OCR, template matching, or game recognition.
 - Daily, Contest, Farm New Account, or other automation pipelines.
 
-Network discovery is not pairing. A service appearing in the list only means that its DNS-SD advertisement was found on the local network. The user must still approve pairing on the target device through Android Wireless Debugging. The app does not obtain or infer the pairing code.
+Network discovery is not pairing. A service appearing in the list only means that its DNS-SD advertisement was found on the local network. The local Keystore identity is currently a storage foundation only; it is not yet encoded as an ADB host key and is not used by an ADB connection. The user must still approve pairing on the target device through Android Wireless Debugging. The app does not obtain or infer the pairing code.
 
 ## Test on devices
 
@@ -62,13 +63,14 @@ See [GitHub Actions](https://github.com/game6789y-wq/Gaku-bot/actions). A debug 
 
 ## Roadmap
 
-1. Verify endpoint selection and service-loss handling on real Android devices.
-2. Implement secure Wireless Debugging pairing and authenticated ADB transport.
-3. Add connection state, timeout, disconnect, and reconnect handling.
-4. Implement authorized screen capture and input forwarding.
-5. Add OCR and template matching.
-6. Port automation pipelines after reviewing upstream licenses and dependencies.
-7. Test on real devices and document verified compatibility.
+1. Verify endpoint selection, service-loss handling, and Android Keystore identity creation on real Android devices.
+2. Adapt the local identity to the exact ADB host-key format and validate compatibility.
+3. Implement secure Wireless Debugging SPAKE2 pairing and authenticated TLS ADB transport.
+4. Add connection state, timeout, disconnect, and reconnect handling.
+5. Implement authorized screen capture and input forwarding.
+6. Add OCR and template matching.
+7. Port automation pipelines after reviewing upstream licenses and dependencies.
+8. Test on real devices and document verified compatibility.
 
 ## Security and licensing
 

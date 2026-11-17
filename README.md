@@ -18,6 +18,8 @@ Native Android companion/controller project inspired by [Carpenter-MK1/MaaHatsub
 - Local IPv4, port-range, and six-digit pairing-code validation (validation only).
 - Local network discovery for `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp` DNS-SD services.
 - Displays discovered service address, port, and service name.
+- Tap a discovered pairing or connect endpoint to fill the matching manual field; pairing and connect ports remain separate.
+- Removes endpoints from the list when Android reports that their DNS-SD service disappeared.
 - C++ JNI foundation.
 - Rust task-state machine with start, pause, resume, complete, and fail transitions plus unit tests.
 - CI workflow for Rust tests, Android debug build, APK checksum verification, and artifact upload.
@@ -60,7 +62,7 @@ See [GitHub Actions](https://github.com/game6789y-wq/Gaku-bot/actions). A debug 
 
 ## Roadmap
 
-1. Complete reliable discovery and endpoint selection.
+1. Verify endpoint selection and service-loss handling on real Android devices.
 2. Implement secure Wireless Debugging pairing and authenticated ADB transport.
 3. Add connection state, timeout, disconnect, and reconnect handling.
 4. Implement authorized screen capture and input forwarding.

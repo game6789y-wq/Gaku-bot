@@ -13,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class AdbEndpoint(
     val serviceType: String,
@@ -184,6 +187,10 @@ private fun Dashboard(
     var status by remember { mutableStateOf("Not connected") }
     var validationError by remember { mutableStateOf<String?>(null) }
     var taskStatus by remember { mutableStateOf("No task selected") }
+    var identityFingerprint by remember { mutableStateOf<String?>(null) }
+    var identityStatus by remember { mutableStateOf("No local identity loaded") }
+    var identityBusy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -240,6 +247,32 @@ private fun Dashboard(
                     status = if (error == null) "Settings valid. ADB authentication and transport are not implemented yet." else "Check connection settings."
                 }) { Text("Validate settings") }
                 Text("Status: $status", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Local ADB identity", style = MaterialTheme.typography.titleMedium)
+                Text("Create or load a device-local RSA-2048 key in Android Keystore. The private key is non-exportable through this app.")
+                Button(enabled = !identityBusy, onClick = {
+                    identityBusy = true
+                    identityStatus = "Working with Android Keystore…" 
+                    scope.launch {
+                        try {
+                            val fingerprint = withContext(Dispatchers.IO) { LocalAdbIdentity.loadOrCreate() }
+                            identityFingerprint = fingerprint
+                            identityStatus = "Local identity is ready on this device."
+                        } catch (error: Exception) {
+                            identityStatus = "Keystore error: " + error.javaClass.simpleName
+                        } finally { identityBusy = false }
+                    }
+                }) { Text(if (identityBusy) "Please wait…" else "Create / load local identity") }
+                Text(identityStatus, style = MaterialTheme.typography.bodySmall)
+                identityFingerprint?.let {
+                    Text("Public-key SHA-256 fingerprint", style = MaterialTheme.typography.labelMedium)
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("This identity is not yet in ADB wire format and is not used for pairing or authentication.", style = MaterialTheme.typography.bodySmall)
             }
         }
 
